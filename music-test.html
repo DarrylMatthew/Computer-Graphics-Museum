@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Museum Nusantara - Virtual Tour</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', sans-serif; }
+        
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10,10,10,0.95); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 2; color: white;
+            text-align: center; cursor: pointer; transition: opacity 0.5s;
+        }
+
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 6px; height: 6px;
+            background: rgba(255, 255, 255, 0.8); border-radius: 50%;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 1;
+            border: 1px solid black; mix-blend-mode: difference;
+        }
+
+        #instructions {
+            background: rgba(30, 30, 30, 0.8); padding: 40px; border: 1px solid #666; border-radius: 4px;
+        }
+        
+        h1 { letter-spacing: 5px; margin-bottom: 5px; }
+        h3 { color: #888; font-weight: normal; margin-top: 0; }
+
+        kbd {
+            background: #444; padding: 4px 8px; border-radius: 4px; border: 1px solid #777; font-weight: bold; color: #fff;
+        }
+    </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="crosshair"></div>
+
+    <div id="overlay">
+        <div id="instructions">
+            <h1>MUSEUM NUSANTARA</h1>
+            <h3>Angklung (West Java) & Gong (Central Java)</h3>
+            <br>
+            <p>Walk: <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></p>
+            <p>Interact: <kbd>LEFT CLICK</kbd></p>
+            <br>
+            <p id="loading-text" style="color: #ffd700;">Loading Exhibition...</p>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- 1. SETUP SCENE ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xcccccc);
+        scene.fog = new THREE.Fog(0xcccccc, 10, 50);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 1.7, 8); // Start at entrance
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
+        document.body.appendChild(renderer.domElement);
+
+        // --- 2. LIGHTING ---
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
+        hemiLight.position.set(0, 20, 0);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        dirLight.position.set(5, 15, 10);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.set(2048, 2048);
+        scene.add(dirLight);
+
+
+        // --- 3. ASSET LOADER ---
+        const gltfLoader = new GLTFLoader();
+        const interactables = []; 
+
+        // HELPER: Auto-Scale & Center Models
+        function normalizeModel(model, targetHeight) {
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            model.position.sub(center); 
+            const scale = targetHeight / size.y;
+            model.scale.setScalar(scale);
+            return model;
+        }
+
+        // A. GALLERY BUILDING
+        gltfLoader.load('./art_gallery.glb', (gltf) => {
+            const building = gltf.scene;
+            building.traverse(c => {
+                if(c.isMesh) {
+                    c.castShadow = true; 
+                    c.receiveShadow = true;
+                    if(c.material) { c.material.roughness = 0.8; c.material.metalness = 0.1; }
+                }
+            });
+            scene.add(building);
+        }, undefined, (e) => console.error(e));
+
+        // B. ANGKLUNG (West Java Zone - FRONT)
+        const angklungNotes = [0, 2, 4, 5, 7, 9, 11, 12]; 
+        gltfLoader.load('./angklung.glb', (gltf) => {
+            const original = normalizeModel(gltf.scene, 2.0); 
+            const baseScale = original.scale.x;
+
+            angklungNotes.forEach((semitone, i) => {
+                const angklung = original.clone();
+                
+                // Position: Front Wall (Z = -6)
+                // We add -2 to ShiftX to center them better
+                const spacing = 1.5;
+                const shiftX = -2; 
+                const xPos = ((i - 3.5) * spacing) + shiftX; 
+
+                angklung.position.set(xPos, 1.2, -6); 
+
+                const s = baseScale * (1.0 - (i * 0.05));
+                angklung.scale.setScalar(s);
+
+                angklung.userData = { 
+                    type: 'instrument', 
+                    soundName: 'angklung',
+                    pitch: semitone * 100, 
+                    baseScale: s
+                };
+
+                scene.add(angklung);
+                interactables.push(angklung);
+
+                const ped = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.4, 0.5, 1.2, 32),
+                    new THREE.MeshStandardMaterial({ color: 0x333 })
+                );
+                ped.position.set(xPos, 0.6, -6);
+                ped.receiveShadow = true;
+                scene.add(ped);
+            });
+        });
+
+        // C. GONG (Central Java Zone - RIGHT SIDE)
+        gltfLoader.load('./gong.glb', (gltf) => {
+            const gong = normalizeModel(gltf.scene, 2.5); 
+            
+            // --- UPDATED POSITION & ROTATION ---
+            gong.position.set(10, 0.5, 1); 
+            gong.rotation.y = 0; 
+
+            gong.userData = { 
+                type: 'instrument',
+                soundName: 'gong', 
+                pitch: 0,
+                baseScale: gong.scale.x
+            };
+
+            gong.traverse(c => {
+                if(c.isMesh) {
+                    c.castShadow = true;
+                    c.material.metalness = 0.6;
+                    c.material.roughness = 0.3;
+                    c.material.color = new THREE.Color(0xffd700); 
+                }
+            });
+
+            scene.add(gong);
+            interactables.push(gong);
+
+            // UPDATED PEDESTAL
+            const ped = new THREE.Mesh(
+                new THREE.BoxGeometry(2.2, 0.5, 2),
+                new THREE.MeshStandardMaterial({ color: 0x5a0000 }) 
+            );
+            ped.position.set(10, 0.25, 1); 
+            ped.receiveShadow = true;
+            scene.add(ped);
+
+        }, undefined, (e) => console.error("Gong load failed", e));
+
+
+        // --- 4. ADVANCED AUDIO SYSTEM ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const soundBuffers = {};
+
+        async function loadSoundFile(name, url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`File ${url} not found`);
+                const arrayBuffer = await response.arrayBuffer();
+                const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                soundBuffers[name] = audioBuffer;
+                console.log(`Loaded ${name}`);
+            } catch (err) {
+                console.warn(`Could not load ${url}`, err);
+            }
+        }
+
+        async function initAudio() {
+            // 1. Angklung Sound
+            await loadSoundFile('angklung', './Angklung.MP3');
+            
+            // 2. Gong Sound (UPDATED: loads gong.mp3)
+            await loadSoundFile('gong', './gong.mp3');
+        }
+
+        function playSound(name, pitchCents) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            let buffer = soundBuffers[name];
+            let detune = pitchCents;
+
+            // Simple check: if audio failed to load, don't crash, just return
+            if (!buffer) return;
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.detune.value = detune;
+            
+            const gainNode = audioCtx.createGain();
+            // Gong gets volume boost (2.0), Angklung normal (0.8)
+            gainNode.gain.value = (name === 'gong') ? 2.0 : 0.8;
+
+            source.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            source.start(0);
+        }
+
+
+        // --- 5. INTERACTION & CONTROLS ---
+        const controls = new PointerLockControls(camera, document.body);
+        const overlay = document.getElementById('overlay');
+
+        overlay.addEventListener('click', async () => {
+            await initAudio(); 
+            controls.lock();
+        });
+
+        controls.addEventListener('lock', () => {
+            overlay.style.opacity = '0';
+            setTimeout(() => overlay.style.display = 'none', 500);
+        });
+        controls.addEventListener('unlock', () => {
+            overlay.style.display = 'flex';
+            setTimeout(() => overlay.style.opacity = '1', 50);
+            document.getElementById('loading-text').innerText = "PAUSED";
+        });
+
+        const raycaster = new THREE.Raycaster();
+        const center = new THREE.Vector2(0, 0);
+
+        document.addEventListener('mousedown', () => {
+            if (!controls.isLocked) return;
+
+            raycaster.setFromCamera(center, camera);
+            const intersects = raycaster.intersectObjects(scene.children, true);
+
+            if (intersects.length > 0) {
+                let obj = intersects[0].object;
+                while(obj.parent && (!obj.userData || !obj.userData.type)) {
+                    obj = obj.parent;
+                }
+
+                if (obj.userData && obj.userData.type === 'instrument') {
+                    playSound(obj.userData.soundName, obj.userData.pitch);
+
+                    const base = obj.userData.baseScale;
+                    obj.scale.setScalar(base * 1.1);
+                    setTimeout(() => obj.scale.setScalar(base), 150);
+                }
+            }
+        });
+
+
+        // --- 6. MOVEMENT LOOP ---
+        const move = { w: false, a: false, s: false, d: false };
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        const clock = new THREE.Clock();
+
+        document.addEventListener('keydown', (e) => {
+            const k = e.code;
+            if (k === 'KeyW') move.w = true;
+            if (k === 'KeyA') move.a = true;
+            if (k === 'KeyS') move.s = true;
+            if (k === 'KeyD') move.d = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            const k = e.code;
+            if (k === 'KeyW') move.w = false;
+            if (k === 'KeyA') move.a = false;
+            if (k === 'KeyS') move.s = false;
+            if (k === 'KeyD') move.d = false;
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (controls.isLocked) {
+                const delta = clock.getDelta();
+
+                velocity.x -= velocity.x * 10.0 * delta; 
+                velocity.z -= velocity.z * 10.0 * delta;
+
+                direction.z = Number(move.w) - Number(move.s);
+                direction.x = Number(move.d) - Number(move.a);
+                direction.normalize();
+
+                if (move.w || move.s) velocity.z -= direction.z * 50.0 * delta;
+                if (move.a || move.d) velocity.x -= direction.x * 50.0 * delta;
+
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+    </script>
+</body>
+</html>

@@ -129,11 +129,11 @@
                 
                 // Position: Front Wall (Z = -6)
                 // We add -2 to ShiftX to center them better
-                const spacing = 1.5;
-                const shiftX = -2; 
+                const spacing = 1;
+                const shiftX = -10; 
                 const xPos = ((i - 3.5) * spacing) + shiftX; 
 
-                angklung.position.set(xPos, 1.2, -6); 
+                angklung.position.set(xPos, 1.2, -9); 
 
                 const s = baseScale * (1.0 - (i * 0.05));
                 angklung.scale.setScalar(s);
@@ -149,10 +149,10 @@
                 interactables.push(angklung);
 
                 const ped = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.4, 0.5, 1.2, 32),
+                    new THREE.CylinderGeometry(0.3, 0.5, 1, 32),
                     new THREE.MeshStandardMaterial({ color: 0x333 })
                 );
-                ped.position.set(xPos, 0.6, -6);
+                ped.position.set(xPos, 0.5, -9);
                 ped.receiveShadow = true;
                 scene.add(ped);
             });

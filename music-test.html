@@ -4,20 +4,30 @@
     <meta charset="UTF-8">
     <title>Museum Nusantara - Virtual Tour</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
+        /* UI UTAMA */
         #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(10,10,10,0.95); display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 2; color: white;
+            justify-content: center; align-items: center; z-index: 10; color: white;
             text-align: center; cursor: pointer; transition: opacity 0.5s;
         }
 
         #crosshair {
             position: absolute; top: 50%; left: 50%; width: 6px; height: 6px;
             background: rgba(255, 255, 255, 0.8); border-radius: 50%;
-            transform: translate(-50%, -50%); pointer-events: none; z-index: 1;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 5;
             border: 1px solid black; mix-blend-mode: difference;
+            transition: all 0.2s;
+        }
+
+        /* Indikator saat Mode Main Aktif */
+        .crosshair-active {
+            width: 20px !important;
+            height: 20px !important;
+            background: transparent !important;
+            border: 2px solid #ffd700 !important;
         }
 
         #instructions {
@@ -28,8 +38,60 @@
         h3 { color: #888; font-weight: normal; margin-top: 0; }
 
         kbd {
-            background: #444; padding: 4px 8px; border-radius: 4px; border: 1px solid #777; font-weight: bold; color: #fff;
+            background: #444; padding: 4px 8px; border-radius: 4px; border: 1px solid #777; font-weight: bold; color: #fff; text-transform: uppercase;
         }
+
+        /* PANEL INFORMASI (KIRI) */
+        #info-panel {
+            position: absolute;
+            top: 50%;
+            left: 30px;
+            transform: translateY(-50%);
+            width: 320px;
+            color: #eee;
+            background: linear-gradient(90deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%);
+            padding: 20px;
+            padding-right: 50px;
+            border-left: 4px solid #444; /* Default Gray */
+            opacity: 0; 
+            transition: opacity 0.5s ease-in-out;
+            pointer-events: none; 
+            z-index: 2;
+        }
+
+        #info-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        #info-desc { font-size: 14px; line-height: 1.6; margin-bottom: 15px; }
+
+        #action-prompt {
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(255, 215, 0, 0.2);
+            border: 1px solid #ffd700;
+            color: #ffd700;
+            font-weight: bold;
+            display: inline-block;
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #mode-indicator {
+            position: absolute; top: 20px; right: 20px;
+            font-size: 20px; font-weight: bold; color: #0f0;
+            text-shadow: 0 0 10px #0f0;
+            display: none; z-index: 5;
+            text-align: right;
+        }
+        
+        .key-row { display: block; margin-top: 4px; font-size: 12px; color: #aaa; }
     </style>
     
     <script type="importmap">
@@ -44,16 +106,31 @@
 <body>
 
     <div id="crosshair"></div>
+    <div id="mode-indicator">♫ PERFORMING MODE ♫<br><span style="font-size:12px; color: white;">Tekan CTRL untuk Keluar</span></div>
+
+    <div id="info-panel">
+        <div id="info-title">NAMA ALAT</div>
+        <div id="info-desc">Deskripsi alat musik.</div>
+        <div id="action-prompt">TEKAN <kbd>CTRL</kbd> UNTUK BERMAIN</div>
+        
+        <div id="controls-hint" style="display:none; margin-top:15px;">
+            <div style="border-top: 1px solid #555; margin: 10px 0;"></div>
+            <strong>KEYBOARD NADA:</strong><br>
+            <span class="key-row"><kbd>Q</kbd>..<kbd>P</kbd> (Nada Tinggi)</span>
+            <span class="key-row"><kbd>A</kbd>..<kbd>L</kbd> (Nada Sedang)</span>
+            <span class="key-row"><kbd>Z</kbd>..<kbd>M</kbd> (Nada Rendah)</span>
+        </div>
+    </div>
 
     <div id="overlay">
         <div id="instructions">
             <h1>MUSEUM NUSANTARA</h1>
-            <h3>Angklung (West Java) & Gong (Central Java)</h3>
+            <h3>Angklung, Gong & Kolintang</h3>
             <br>
-            <p>Walk: <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></p>
-            <p>Interact: <kbd>LEFT CLICK</kbd></p>
+            <p>Jalan: <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></p>
+            <p>Interaksi: Dekati alat musik & Tekan <kbd>CTRL</kbd></p>
             <br>
-            <p id="loading-text" style="color: #ffd700;">Loading Exhibition...</p>
+            <p id="loading-text" style="color: #ffd700;">Klik untuk Masuk Pameran</p>
         </div>
     </div>
 
@@ -62,13 +139,20 @@
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
+        // --- GLOBAL VARIABLES ---
+        const instruments = { angklung: [], kolintang: [], gong: [] };
+        let activeInstrumentName = null; 
+        
+        // STATUS MODE
+        let isPerforming = false; // FALSE = Mode Jalan, TRUE = Mode Main Musik
+
         // --- 1. SETUP SCENE ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xcccccc);
         scene.fog = new THREE.Fog(0xcccccc, 10, 50);
 
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 1.7, 8); // Start at entrance
+        camera.position.set(0, 1.7, 8); 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -89,12 +173,9 @@
         dirLight.shadow.mapSize.set(2048, 2048);
         scene.add(dirLight);
 
-
         // --- 3. ASSET LOADER ---
         const gltfLoader = new GLTFLoader();
-        const interactables = []; 
-
-        // HELPER: Auto-Scale & Center Models
+        
         function normalizeModel(model, targetHeight) {
             const box = new THREE.Box3().setFromObject(model);
             const size = box.getSize(new THREE.Vector3());
@@ -105,20 +186,14 @@
             return model;
         }
 
-        // A. GALLERY BUILDING
+        // A. GALLERY
         gltfLoader.load('./art_gallery.glb', (gltf) => {
             const building = gltf.scene;
-            building.traverse(c => {
-                if(c.isMesh) {
-                    c.castShadow = true; 
-                    c.receiveShadow = true;
-                    if(c.material) { c.material.roughness = 0.8; c.material.metalness = 0.1; }
-                }
-            });
+            building.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
             scene.add(building);
         }, undefined, (e) => console.error(e));
 
-        // B. ANGKLUNG (West Java Zone - FRONT)
+        // B. ANGKLUNG
         const angklungNotes = [0, 2, 4, 5, 7, 9, 11, 12]; 
         gltfLoader.load('./angklung.glb', (gltf) => {
             const original = normalizeModel(gltf.scene, 2.0); 
@@ -126,200 +201,301 @@
 
             angklungNotes.forEach((semitone, i) => {
                 const angklung = original.clone();
-                
-                // Position: Front Wall (Z = -6)
-                // We add -2 to ShiftX to center them better
-                const spacing = 1;
-                const shiftX = -10; 
-                const xPos = ((i - 3.5) * spacing) + shiftX; 
-
+                const xPos = ((i - 3.5) * 1) - 10; 
                 angklung.position.set(xPos, 1.2, -9); 
-
                 const s = baseScale * (1.0 - (i * 0.05));
                 angklung.scale.setScalar(s);
-
                 angklung.userData = { 
-                    type: 'instrument', 
-                    soundName: 'angklung',
-                    pitch: semitone * 100, 
-                    baseScale: s
+                    type: 'instrument', soundName: 'angklung', pitch: semitone * 100,
+                    originalScale: angklung.scale.clone(), animTimeout: null
                 };
-
                 scene.add(angklung);
-                interactables.push(angklung);
+                instruments.angklung.push(angklung);
 
-                const ped = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.3, 0.5, 1, 32),
-                    new THREE.MeshStandardMaterial({ color: 0x333 })
-                );
+                const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 1, 32), new THREE.MeshStandardMaterial({ color: 0x333 }));
                 ped.position.set(xPos, 0.5, -9);
-                ped.receiveShadow = true;
                 scene.add(ped);
             });
         });
 
-        // C. GONG (Central Java Zone - RIGHT SIDE)
+        // C. GONG
         gltfLoader.load('./gong.glb', (gltf) => {
             const gong = normalizeModel(gltf.scene, 2.5); 
-            
-            // --- UPDATED POSITION & ROTATION ---
             gong.position.set(10, 0.5, 1); 
-            gong.rotation.y = 0; 
-
             gong.userData = { 
-                type: 'instrument',
-                soundName: 'gong', 
-                pitch: 0,
-                baseScale: gong.scale.x
+                type: 'instrument', soundName: 'gong', pitch: 0,
+                originalScale: gong.scale.clone(), animTimeout: null
             };
-
-            gong.traverse(c => {
-                if(c.isMesh) {
-                    c.castShadow = true;
-                    c.material.metalness = 0.6;
-                    c.material.roughness = 0.3;
-                    c.material.color = new THREE.Color(0xffd700); 
-                }
-            });
-
+            gong.traverse(c => { if(c.isMesh) { c.castShadow = true; c.material.color = new THREE.Color(0xffd700); }});
             scene.add(gong);
-            interactables.push(gong);
+            instruments.gong.push(gong);
+            
+            const ped = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 2), new THREE.MeshStandardMaterial({ color: 0x5a0000 }));
+            ped.position.set(10, 0.25, 1); scene.add(ped);
+        }, undefined, (e) => console.error("Gong error", e));
 
-            // UPDATED PEDESTAL
-            const ped = new THREE.Mesh(
-                new THREE.BoxGeometry(2.2, 0.5, 2),
-                new THREE.MeshStandardMaterial({ color: 0x5a0000 }) 
-            );
-            ped.position.set(10, 0.25, 1); 
-            ped.receiveShadow = true;
-            scene.add(ped);
+        // D. KOLINTANG
+        const kolintangPitches = [];
+        for (let i = 0; i < 16; i++) { kolintangPitches.push(200 + (i * 100)); }
+        const kolintangConfig = [
+            { fileName: 'kolintangtable.glb', x: 9, y: 0.4, z: -9, scale: [1.5, 1.5, 1.4], type: 'static' },
+            { fileName: 'kolintangbeat.glb', x: 10, y: 0.63, z: -9, scale: [1.5, 1.5, 1.5], type: 'static' }
+        ];
 
-        }, undefined, (e) => console.error("Gong load failed", e));
+        const jumlahNada = 16; const gap = 0.08; const shrink = 0.02; 
+        const startX = 9.52 - ((jumlahNada * gap) / 2) + 0.5;
 
+        for (let i = 0; i < jumlahNada; i++) {
+            const currentX = startX + (i * gap);
+            const scaleLength = 1.5 * (1 - (i * shrink)); 
+            kolintangConfig.push({
+                fileName: 'kolintangblock.glb', x: currentX, y: 0.64, z: -9,      
+                scale: [scaleLength, 1.5, 1.5], type: 'instrument', soundName: 'kolintang', pitch: kolintangPitches[i]  
+            });
+            kolintangConfig.push({ fileName: 'kolintangtacks.glb', x: currentX + 1.14, y: 0.67, z: -9, scale: [1.5, 1.5, 1.5], type: 'static' });
+        }
+        kolintangConfig.push({ fileName: 'kolintangtacks.glb', x: startX + (jumlahNada * gap) + 1.14, y: 0.67, z: -9, scale: [1.5, 1.5, 1.5], type: 'static' });
+        
+        kolintangConfig.forEach((item) => {
+            gltfLoader.load(`./${item.fileName}`, (gltf) => {
+                const model = gltf.scene;
+                model.position.set(item.x, item.y, item.z);
+                model.rotation.y = -Math.PI / 2; 
+                if (Array.isArray(item.scale)) model.scale.set(item.scale[0], item.scale[1], item.scale[2]);
+                else model.scale.setScalar(item.scale);
 
-        // --- 4. ADVANCED AUDIO SYSTEM ---
+                if (item.type === 'instrument') {
+                    model.userData = {
+                        type: 'instrument', soundName: item.soundName, pitch: item.pitch,
+                        originalScale: model.scale.clone(), animTimeout: null
+                    };
+                    instruments.kolintang.push(model);
+                    instruments.kolintang.sort((a, b) => a.position.x - b.position.x);
+                }
+                model.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+                scene.add(model);
+            }, undefined, (e) => console.error(`Error ${item.fileName}`, e));
+        });
+
+        // --- 4. AUDIO SYSTEM ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const soundBuffers = {};
-
         async function loadSoundFile(name, url) {
             try {
                 const response = await fetch(url);
-                if (!response.ok) throw new Error(`File ${url} not found`);
                 const arrayBuffer = await response.arrayBuffer();
-                const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-                soundBuffers[name] = audioBuffer;
-                console.log(`Loaded ${name}`);
-            } catch (err) {
-                console.warn(`Could not load ${url}`, err);
-            }
+                soundBuffers[name] = await audioCtx.decodeAudioData(arrayBuffer);
+            } catch (err) { console.warn(`Error loading ${url}`, err); }
         }
-
         async function initAudio() {
-            // 1. Angklung Sound
             await loadSoundFile('angklung', './Angklung.MP3');
-            
-            // 2. Gong Sound (UPDATED: loads gong.mp3)
             await loadSoundFile('gong', './gong.mp3');
+            await loadSoundFile('kolintang', './kulintang.MP3');
         }
-
         function playSound(name, pitchCents) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
-
             let buffer = soundBuffers[name];
-            let detune = pitchCents;
-
-            // Simple check: if audio failed to load, don't crash, just return
             if (!buffer) return;
-
             const source = audioCtx.createBufferSource();
             source.buffer = buffer;
-            source.detune.value = detune;
-            
+            source.detune.value = pitchCents; 
             const gainNode = audioCtx.createGain();
-            // Gong gets volume boost (2.0), Angklung normal (0.8)
-            gainNode.gain.value = (name === 'gong') ? 2.0 : 0.8;
-
-            source.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
+            gainNode.gain.value = name === 'gong' ? 2.0 : (name === 'kolintang' ? 1.2 : 0.8);
+            source.connect(gainNode); gainNode.connect(audioCtx.destination);
             source.start(0);
         }
 
+        function triggerInstrument(obj) {
+            if (!obj || !obj.userData || obj.userData.type !== 'instrument') return;
+            playSound(obj.userData.soundName, obj.userData.pitch);
+            if (obj.userData.originalScale) {
+                if (obj.userData.animTimeout) clearTimeout(obj.userData.animTimeout);
+                obj.scale.copy(obj.userData.originalScale);
+                obj.scale.multiplyScalar(1.1);
+                obj.userData.animTimeout = setTimeout(() => {
+                    obj.scale.copy(obj.userData.originalScale); obj.userData.animTimeout = null;
+                }, 150);
+            }
+        }
 
-        // --- 5. INTERACTION & CONTROLS ---
+        // --- 5. LOGIKA INFORMASI & PROXIMITY ---
+        const infoPanel = document.getElementById('info-panel');
+        const infoTitle = document.getElementById('info-title');
+        const infoDesc = document.getElementById('info-desc');
+        const actionPrompt = document.getElementById('action-prompt');
+        const controlsHint = document.getElementById('controls-hint');
+        const modeIndicator = document.getElementById('mode-indicator');
+        const crosshair = document.getElementById('crosshair');
+
+        const instrumentInfo = {
+            angklung: {
+                title: "Angklung", target: new THREE.Vector3(-10, 0, -9), threshold: 6.0,
+                desc: "Alat musik bambu dari Jawa Barat. Digoyangkan untuk menghasilkan nada."
+            },
+            gong: {
+                title: "Gong Ageng", target: new THREE.Vector3(10, 0, 1), threshold: 5.0,
+                desc: "Instrumen terbesar dalam gamelan Jawa. Penanda awal dan akhir gending."
+            },
+            kolintang: {
+                title: "Kolintang", target: new THREE.Vector3(9, 0, -9), threshold: 5.0,
+                desc: "Alat musik pukul kayu dari Minahasa, Sulawesi Utara."
+            }
+        };
+
+        function checkProximity() {
+            // Jika sedang mode perform, jangan update panel berdasarkan jarak
+            if (isPerforming) return;
+
+            let found = false;
+            for (const [key, data] of Object.entries(instrumentInfo)) {
+                const dist = Math.sqrt(Math.pow(camera.position.x - data.target.x, 2) + Math.pow(camera.position.z - data.target.z, 2));
+                if (dist < data.threshold) {
+                    infoTitle.innerText = data.title;
+                    infoDesc.innerText = data.desc;
+                    infoPanel.style.opacity = 1;
+                    actionPrompt.style.opacity = 1; // Tampilkan tombol trigger
+                    infoPanel.style.borderLeftColor = "#ffd700";
+                    activeInstrumentName = key;
+                    found = true;
+                    break; 
+                }
+            }
+            if (!found) {
+                infoPanel.style.opacity = 0;
+                activeInstrumentName = null;
+            }
+        }
+
+        // --- 6. INTERACTION & CONTROLS ---
         const controls = new PointerLockControls(camera, document.body);
         const overlay = document.getElementById('overlay');
 
-        overlay.addEventListener('click', async () => {
-            await initAudio(); 
-            controls.lock();
-        });
+        overlay.addEventListener('click', async () => { await initAudio(); controls.lock(); });
 
         controls.addEventListener('lock', () => {
             overlay.style.opacity = '0';
             setTimeout(() => overlay.style.display = 'none', 500);
         });
+        
+        // SAAT ESC DITEKAN (UNLOCK)
         controls.addEventListener('unlock', () => {
+            // Reset Mode Perform ke Mode Jalan
+            isPerforming = false;
+            modeIndicator.style.display = 'none';
+            controlsHint.style.display = 'none';
+            crosshair.classList.remove('crosshair-active');
+            
+            // Tampilkan Overlay
             overlay.style.display = 'flex';
             setTimeout(() => overlay.style.opacity = '1', 50);
-            document.getElementById('loading-text').innerText = "PAUSED";
+            document.getElementById('loading-text').innerText = "TERJEDA - KLIK UNTUK LANJUT";
         });
 
+        // MOUSE CLICK
         const raycaster = new THREE.Raycaster();
         const center = new THREE.Vector2(0, 0);
 
         document.addEventListener('mousedown', () => {
             if (!controls.isLocked) return;
-
+            // Di mode perform, mouse click juga boleh dipakai
             raycaster.setFromCamera(center, camera);
             const intersects = raycaster.intersectObjects(scene.children, true);
-
             if (intersects.length > 0) {
                 let obj = intersects[0].object;
-                while(obj.parent && (!obj.userData || !obj.userData.type)) {
-                    obj = obj.parent;
-                }
-
-                if (obj.userData && obj.userData.type === 'instrument') {
-                    playSound(obj.userData.soundName, obj.userData.pitch);
-
-                    const base = obj.userData.baseScale;
-                    obj.scale.setScalar(base * 1.1);
-                    setTimeout(() => obj.scale.setScalar(base), 150);
-                }
+                while(obj.parent && (!obj.userData || !obj.userData.type)) { obj = obj.parent; }
+                triggerInstrument(obj);
             }
         });
 
+        // KEYBOARD HANDLER
+        const keyMap = {
+            'KeyZ': 0, 'KeyX': 1, 'KeyC': 2, 'KeyV': 3, 'KeyB': 4, 'KeyN': 5, 'KeyM': 6,
+            'KeyA': 7, 'KeyS': 8, 'KeyD': 9, 'KeyF': 10, 'KeyG': 11, 'KeyH': 12, 'KeyJ': 13, 'KeyK': 14, 'KeyL': 15,
+            'KeyQ': 16, 'KeyW': 17, 'KeyE': 18, 'KeyR': 19, 'KeyT': 20, 'KeyY': 21, 'KeyU': 22, 'KeyI': 23, 'KeyO': 24, 'KeyP': 25
+        };
 
-        // --- 6. MOVEMENT LOOP ---
+        // MOVEMENT FLAGS
         const move = { w: false, a: false, s: false, d: false };
+
+        document.addEventListener('keydown', (e) => {
+            if (!controls.isLocked) return;
+
+            // 1. LOGIKA TOMBOL 'CTRL' (TOGGLE MODE)
+            // Menggunakan e.key === 'Control' untuk mendeteksi Ctrl Kiri atau Kanan
+            if (e.key === 'Control') {
+                if (activeInstrumentName) {
+                    
+                    // TOGGLE TRUE/FALSE
+                    isPerforming = !isPerforming; 
+
+                    if (isPerforming) {
+                        // --> MASUK MODE MAIN
+                        modeIndicator.style.display = 'block';
+                        controlsHint.style.display = 'block';
+                        actionPrompt.style.opacity = 0; // Sembunyikan prompt 'Tekan CTRL'
+                        crosshair.classList.add('crosshair-active');
+                        
+                        // Stop movement
+                        move.w = false; move.a = false; move.s = false; move.d = false;
+
+                    } else {
+                        // --> KELUAR MODE MAIN (KEMBALI JALAN)
+                        modeIndicator.style.display = 'none';
+                        controlsHint.style.display = 'none';
+                        actionPrompt.style.opacity = 1; // Munculkan prompt 'Tekan CTRL'
+                        crosshair.classList.remove('crosshair-active');
+                    }
+                }
+                return; // Jangan lanjut ke logika lain
+            }
+
+            // 2. LOGIKA SAAT PERFORMING (Musik ON, Jalan OFF)
+            if (isPerforming) {
+                // Mainkan Musik via Keyboard
+                if (keyMap.hasOwnProperty(e.code) && activeInstrumentName) {
+                    const noteIndex = keyMap[e.code];
+                    const targetArray = instruments[activeInstrumentName];
+                    if (targetArray && targetArray.length > 0) {
+                        if (activeInstrumentName === 'gong') triggerInstrument(targetArray[0]);
+                        else if (targetArray[noteIndex]) triggerInstrument(targetArray[noteIndex]);
+                    }
+                }
+                // BLOKIR WASD agar tidak jalan
+                return; 
+            }
+
+            // 3. LOGIKA SAAT JALAN (Musik OFF, Jalan ON)
+            if (e.code === 'KeyW') move.w = true;
+            if (e.code === 'KeyA') move.a = true;
+            if (e.code === 'KeyS') move.s = true;
+            if (e.code === 'KeyD') move.d = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'KeyW') move.w = false;
+            if (e.code === 'KeyA') move.a = false;
+            if (e.code === 'KeyS') move.s = false;
+            if (e.code === 'KeyD') move.d = false;
+        });
+
+        // --- 7. ANIMATION LOOP ---
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
         const clock = new THREE.Clock();
 
-        document.addEventListener('keydown', (e) => {
-            const k = e.code;
-            if (k === 'KeyW') move.w = true;
-            if (k === 'KeyA') move.a = true;
-            if (k === 'KeyS') move.s = true;
-            if (k === 'KeyD') move.d = true;
-        });
-        document.addEventListener('keyup', (e) => {
-            const k = e.code;
-            if (k === 'KeyW') move.w = false;
-            if (k === 'KeyA') move.a = false;
-            if (k === 'KeyS') move.s = false;
-            if (k === 'KeyD') move.d = false;
-        });
-
         function animate() {
             requestAnimationFrame(animate);
+
+            checkProximity(); // Cek jarak
 
             if (controls.isLocked) {
                 const delta = clock.getDelta();
 
+                // Perlambatan (Friction)
                 velocity.x -= velocity.x * 10.0 * delta; 
                 velocity.z -= velocity.z * 10.0 * delta;
 
+                // Hitung Arah Input
                 direction.z = Number(move.w) - Number(move.s);
                 direction.x = Number(move.d) - Number(move.a);
                 direction.normalize();
@@ -330,7 +506,6 @@
                 controls.moveRight(-velocity.x * delta);
                 controls.moveForward(-velocity.z * delta);
             }
-
             renderer.render(scene, camera);
         }
         animate();

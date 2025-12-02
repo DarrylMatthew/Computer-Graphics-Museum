@@ -140,7 +140,7 @@
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
         // --- GLOBAL VARIABLES ---
-        const instruments = { angklung: [], kolintang: [], gong: [] };
+        const instruments = { angklung: [], kolintang: [], gong: [], bonang: [] };
         let activeInstrumentName = null; 
         
         // STATUS MODE
@@ -233,6 +233,21 @@
             const ped = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 2), new THREE.MeshStandardMaterial({ color: 0x5a0000 }));
             ped.position.set(10, 0.25, 1); scene.add(ped);
         }, undefined, (e) => console.error("Gong error", e));
+
+        // C2. BONANG (new)
+        // Using the existing Bonang.glb model found in the project root. We'll add it as a single playable instrument (reuses gong audio for now).
+        gltfLoader.load('./Bonang.glb', (gltf) => {
+            const bonang = normalizeModel(gltf.scene, 1.8);
+            bonang.position.set(-10, 0.25, 2);
+            bonang.userData = {
+                type: 'instrument', soundName: 'gong', pitch: 0,
+                originalScale: bonang.scale.clone(), animTimeout: null
+            };
+            // Slightly golden accents for visibility
+            bonang.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            scene.add(bonang);
+            instruments.bonang.push(bonang);
+        }, undefined, (e) => console.error("Bonang error", e));
 
         // D. KOLINTANG
         const kolintangPitches = [];
@@ -339,6 +354,11 @@
             kolintang: {
                 title: "Kolintang", target: new THREE.Vector3(9, 0, -9), threshold: 5.0,
                 desc: "Alat musik pukul kayu dari Minahasa, Sulawesi Utara."
+            }
+            ,
+            bonang: {
+                title: "Bonang", target: new THREE.Vector3(-10, 0, 2), threshold: 4.0,
+                desc: "Bonang — serangkaian gong kecil yang dipukul, bagian dari gamelan Jawa. Tekan CTRL untuk berinteraksi."
             }
         };
 
@@ -456,7 +476,7 @@
                     const noteIndex = keyMap[e.code];
                     const targetArray = instruments[activeInstrumentName];
                     if (targetArray && targetArray.length > 0) {
-                        if (activeInstrumentName === 'gong') triggerInstrument(targetArray[0]);
+                        if (activeInstrumentName === 'gong' || activeInstrumentName === 'bonang') triggerInstrument(targetArray[0]);
                         else if (targetArray[noteIndex]) triggerInstrument(targetArray[noteIndex]);
                     }
                 }

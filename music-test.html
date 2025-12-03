@@ -326,6 +326,91 @@
             }, undefined, (e) => console.error(`Error ${item.fileName}`, e));
         });
 
+        // E. PAINTING (NEW)
+        gltfLoader.load('./painting_1.glb', (gltf) => {
+            const painting = normalizeModel(gltf.scene, 3.6);
+
+            painting.position.set(0, 7, -18.8); 
+
+            painting.traverse(c => { 
+                if(c.isMesh) { 
+                    c.castShadow = true; 
+                    c.receiveShadow = true; 
+                }
+            });
+
+            scene.add(painting);
+        }, undefined, (e) => console.error("Painting error", e));
+        
+        // F. PAINTING 2
+        gltfLoader.load('./painting_2.glb', (gltf) => {
+            const painting = normalizeModel(gltf.scene, 3.5);
+
+            painting.position.set(0, -5.4, -31.2); 
+
+            painting.traverse(c => { 
+                if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+            });
+            scene.add(painting);
+        }, undefined, (e) => console.error("Painting 2 error", e));
+        
+        // G. PAINTING 3
+        gltfLoader.load('./painting_3.glb', (gltf) => {
+            const painting = normalizeModel(gltf.scene, 3.6);
+
+            painting.position.set(-18, 3.4, -18.8); 
+
+            painting.traverse(c => { 
+                if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+            });
+            scene.add(painting);
+        }, undefined, (e) => console.error("Painting 2 error", e));
+        
+        // G. PAINTING 4
+        gltfLoader.load('./painting_4.glb', (gltf) => {
+            const painting = normalizeModel(gltf.scene, 3.6);
+
+            painting.position.set(18, 3.2, -18.8); 
+
+            painting.traverse(c => { 
+                if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+            });
+            scene.add(painting);
+        }, undefined, (e) => console.error("Painting 2 error", e));
+        
+        // H. ART 1
+        gltfLoader.load('./art_1.glb', (gltf) => {
+            // 1. Set Size: 2.5 units high
+            const art = normalizeModel(gltf.scene, 3);
+
+            // 2. Set Position:
+            // x=0 (Center), y=1.25 (On Floor), z=-5 (In front of instruments)
+            art.position.set(0, -0.1, -18.3); 
+            art.rotation.y = Math.PI / 2;
+
+            art.traverse(c => { 
+                if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+            });
+            scene.add(art);
+        }, undefined, (e) => console.error("Art 1 error", e));
+        
+        // H. CHANDELIER 1
+        gltfLoader.load('./chandelier_2.glb', (gltf) => {
+            // 1. Set Size: Change 4 to 2 (4 is usually too big for a room)
+            const chandelier = normalizeModel(gltf.scene, 3); 
+
+            // 2. Set Position:
+            // x=0 (Center)
+            // y=6 (High up near the ceiling!)
+            // z=-5 (In front of instruments)
+            chandelier.position.set(-10.5, -3.5, -12); 
+
+            chandelier.traverse(c => { 
+                if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+            });
+            scene.add(chandelier);
+        }, undefined, (e) => console.error("Chandelier error", e));
+
         // --- 4. AUDIO SYSTEM ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const soundBuffers = {};

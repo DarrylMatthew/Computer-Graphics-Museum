@@ -144,7 +144,8 @@
         let activeInstrumentName = null; 
         
         // STATUS MODE
-        let isPerforming = false; // FALSE = Mode Jalan, TRUE = Mode Main Musik
+        let isPerforming = false;
+        let hoveredObject = null;
 
         // --- 1. SETUP SCENE ---
         const scene = new THREE.Scene();
@@ -234,19 +235,52 @@
             ped.position.set(10, 0.25, 1); scene.add(ped);
         }, undefined, (e) => console.error("Gong error", e));
 
-        // C2. BONANG (new)
-        // Using the existing Bonang.glb model found in the project root. We'll add it as a single playable instrument (reuses gong audio for now).
+        // --- LOAD BONANG (UPDATE: DETEKSI NAMA DARI BLENDER) ---
         gltfLoader.load('./Bonang.glb', (gltf) => {
-            const bonang = normalizeModel(gltf.scene, 1.8);
-            bonang.position.set(-10, 0.25, 2);
-            bonang.userData = {
-                type: 'instrument', soundName: 'gong', pitch: 0,
-                originalScale: bonang.scale.clone(), animTimeout: null
-            };
-            // Slightly golden accents for visibility
-            bonang.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
-            scene.add(bonang);
-            instruments.bonang.push(bonang);
+            const bonangGroup = normalizeModel(gltf.scene, 1.8);
+            bonangGroup.position.set(-10, 0.25, 2);
+            
+            const pots = [];
+
+            // 1. Loop mencari bagian berdasarkan NAMA dari Blender
+            bonangGroup.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    
+                    // Cek apakah nama objek mengandung "Kempyang" atau "Kethuk"
+                    // (Sesuai struktur file Blender Anda)
+                    if (child.name.includes("Kempyang") || child.name.includes("Kethuk")) {
+                        
+                        // PENTING: Simpan posisi Y asli agar bisa kembali turun setelah naik
+                        child.userData.originalY = child.position.y;
+                        
+                        // Masukkan ke daftar panci interaktif
+                        pots.push(child);
+                    }
+                }
+            });
+
+            // 2. Urutkan panci dari kiri ke kanan (agar nada urut di keyboard)
+            pots.sort((a, b) => {
+                const posA = new THREE.Vector3(); a.getWorldPosition(posA);
+                const posB = new THREE.Vector3(); b.getWorldPosition(posB);
+                return posA.x - posB.x; 
+            });
+
+            // 3. Set Data Interaksi
+            pots.forEach((pot, index) => {
+                pot.userData = {
+                    type: 'instrument', 
+                    soundName: 'bonang', 
+                    pitch: index * 100, 
+                    originalY: pot.position.y // Pastikan ini tersimpan
+                };
+                instruments.bonang.push(pot);
+            });
+
+            scene.add(bonangGroup);
+
         }, undefined, (e) => console.error("Bonang error", e));
 
         // D. KOLINTANG
@@ -306,7 +340,10 @@
             await loadSoundFile('angklung', './Angklung.MP3');
             await loadSoundFile('gong', './gong.mp3');
             await loadSoundFile('kolintang', './kulintang.MP3');
+            // Add Bonang audio file (place bonang.mp3 in the project root)
+            await loadSoundFile('bonang', './bonang.mp3');
         }
+        // name: string key for soundBuffers, pitchCents: detune in cents (100 cents = 1 semitone)
         function playSound(name, pitchCents) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             let buffer = soundBuffers[name];
@@ -315,21 +352,49 @@
             source.buffer = buffer;
             source.detune.value = pitchCents; 
             const gainNode = audioCtx.createGain();
-            gainNode.gain.value = name === 'gong' ? 2.0 : (name === 'kolintang' ? 1.2 : 0.8);
+            // Slightly different gain for bonang to taste
+            gainNode.gain.value = name === 'gong' ? 2.0 : (name === 'bonang' ? 1.6 : (name === 'kolintang' ? 1.2 : 0.8));
             source.connect(gainNode); gainNode.connect(audioCtx.destination);
             source.start(0);
         }
 
-        function triggerInstrument(obj) {
+        // Trigger an instrument object. Optional pitchOverride provided in cents.
+        // --- FUNGSI TRIGGER INSTRUMENT (UPDATE) ---
+        function triggerInstrument(obj, pitchOverride) {
             if (!obj || !obj.userData || obj.userData.type !== 'instrument') return;
-            playSound(obj.userData.soundName, obj.userData.pitch);
-            if (obj.userData.originalScale) {
+
+            // 1. Mainkan Suara
+            const pitch = (typeof pitchOverride === 'number') ? pitchOverride : (obj.userData.pitch || 0);
+            playSound(obj.userData.soundName, pitch);
+
+            // 2. Animasi Visual
+            if (obj.userData.soundName === 'bonang') {
+                // --- KHUSUS BONANG: NAIK KE ATAS (Translation) ---
+                
+                // Hentikan animasi sebelumnya jika ada (biar gak glitch kalau dipencet cepat)
                 if (obj.userData.animTimeout) clearTimeout(obj.userData.animTimeout);
-                obj.scale.copy(obj.userData.originalScale);
-                obj.scale.multiplyScalar(1.1);
+
+                // Gerakan NAIK (Y axis bertambah)
+                // Kita gunakan posisi asli (originalY) + 0.3 unit
+                obj.position.y = obj.userData.originalY + 0.3;
+
+                // Kembali ke posisi semula setelah 150ms
                 obj.userData.animTimeout = setTimeout(() => {
-                    obj.scale.copy(obj.userData.originalScale); obj.userData.animTimeout = null;
+                    obj.position.y = obj.userData.originalY;
+                    obj.userData.animTimeout = null;
                 }, 150);
+
+            } else {
+                // --- UNTUK ALAT LAIN (Angklung/Gong): TETAP MEMBESAR (Scale) ---
+                if (obj.userData.originalScale) {
+                    if (obj.userData.animTimeout) clearTimeout(obj.userData.animTimeout);
+                    obj.scale.copy(obj.userData.originalScale);
+                    obj.scale.multiplyScalar(1.1); // Membesar sedikit
+                    obj.userData.animTimeout = setTimeout(() => {
+                        obj.scale.copy(obj.userData.originalScale);
+                        obj.userData.animTimeout = null;
+                    }, 150);
+                }
             }
         }
 
@@ -439,9 +504,6 @@
 
         document.addEventListener('keydown', (e) => {
             if (!controls.isLocked) return;
-
-            // 1. LOGIKA TOMBOL 'CTRL' (TOGGLE MODE)
-            // Menggunakan e.key === 'Control' untuk mendeteksi Ctrl Kiri atau Kanan
             if (e.key === 'Control') {
                 if (activeInstrumentName) {
                     
@@ -462,29 +524,30 @@
                         // --> KELUAR MODE MAIN (KEMBALI JALAN)
                         modeIndicator.style.display = 'none';
                         controlsHint.style.display = 'none';
-                        actionPrompt.style.opacity = 1; // Munculkan prompt 'Tekan CTRL'
+                        actionPrompt.style.opacity = 1; 
                         crosshair.classList.remove('crosshair-active');
                     }
                 }
-                return; // Jangan lanjut ke logika lain
+                return; 
             }
 
-            // 2. LOGIKA SAAT PERFORMING (Musik ON, Jalan OFF)
             if (isPerforming) {
-                // Mainkan Musik via Keyboard
                 if (keyMap.hasOwnProperty(e.code) && activeInstrumentName) {
                     const noteIndex = keyMap[e.code];
                     const targetArray = instruments[activeInstrumentName];
                     if (targetArray && targetArray.length > 0) {
-                        if (activeInstrumentName === 'gong' || activeInstrumentName === 'bonang') triggerInstrument(targetArray[0]);
-                        else if (targetArray[noteIndex]) triggerInstrument(targetArray[noteIndex]);
+                                if (activeInstrumentName === 'bonang') {
+                                    const pieceIndex = noteIndex % targetArray.length;
+                                    const piece = targetArray[pieceIndex];
+                                    if (piece) triggerInstrument(piece);
+                                } else if (activeInstrumentName === 'gong') {
+                                    triggerInstrument(targetArray[0]);
+                                } else if (targetArray[noteIndex]) triggerInstrument(targetArray[noteIndex]);
                     }
                 }
-                // BLOKIR WASD agar tidak jalan
                 return; 
             }
 
-            // 3. LOGIKA SAAT JALAN (Musik OFF, Jalan ON)
             if (e.code === 'KeyW') move.w = true;
             if (e.code === 'KeyA') move.a = true;
             if (e.code === 'KeyS') move.s = true;
@@ -502,20 +565,21 @@
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
         const clock = new THREE.Clock();
+        let hoveredBonang = null;
 
         function animate() {
             requestAnimationFrame(animate);
 
-            checkProximity(); // Cek jarak
+            // 1. Cek Jarak (Untuk UI Panel Info)
+            checkProximity(); 
 
+            // 2. PLAYER MOVEMENT (Jalan)
             if (controls.isLocked) {
                 const delta = clock.getDelta();
 
-                // Perlambatan (Friction)
                 velocity.x -= velocity.x * 10.0 * delta; 
                 velocity.z -= velocity.z * 10.0 * delta;
 
-                // Hitung Arah Input
                 direction.z = Number(move.w) - Number(move.s);
                 direction.x = Number(move.d) - Number(move.a);
                 direction.normalize();
@@ -525,7 +589,55 @@
 
                 controls.moveRight(-velocity.x * delta);
                 controls.moveForward(-velocity.z * delta);
+
+                // --- 3. LOGIKA HOVER (BONANG NAIK SAAT DILIHAT) ---
+                
+                // Tembakkan raycaster dari tengah layar (kamera)
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                
+                // Cek objek apa yang kena garis pandang
+                const intersects = raycaster.intersectObjects(scene.children, true);
+                
+                if (intersects.length > 0) {
+                    const hitObj = intersects[0].object;
+
+                    // Apakah yang dilihat adalah Panci Bonang?
+                    if (hitObj.userData && hitObj.userData.soundName === 'bonang') {
+                        
+                        // Jika ini objek baru (belum di-hover sebelumnya)
+                        if (hoveredObject !== hitObj) {
+                            
+                            // 1. Reset objek lama ke bawah (jika ada)
+                            if (hoveredObject && hoveredObject.userData.originalY !== undefined) {
+                                hoveredObject.position.y = hoveredObject.userData.originalY;
+                            }
+
+                            // 2. Simpan objek baru sebagai target
+                            hoveredObject = hitObj;
+
+                            // 3. NAIKKAN Panci Baru (Animasi Pop Up)
+                            // Posisi Y saat ini = Posisi Asli + 0.3
+                            hoveredObject.position.y = hoveredObject.userData.originalY + 0.3;
+                            
+                            // (Opsional) Jika ingin bunyi saat lewat, uncomment baris ini:
+                            // triggerInstrument(hoveredObject); 
+                        }
+                    } else {
+                        // Kursor kena objek lain (tembok/lantai), reset bonang yang sedang naik
+                        if (hoveredObject) {
+                            hoveredObject.position.y = hoveredObject.userData.originalY;
+                            hoveredObject = null;
+                        }
+                    }
+                } else {
+                    // Kursor lihat langit/kosong, reset bonang
+                    if (hoveredObject) {
+                        hoveredObject.position.y = hoveredObject.userData.originalY;
+                        hoveredObject = null;
+                    }
+                }
             }
+            
             renderer.render(scene, camera);
         }
         animate();

@@ -394,21 +394,51 @@
             scene.add(art);
         }, undefined, (e) => console.error("Art 1 error", e));
         
-        // H. CHANDELIER 1
-        gltfLoader.load('./chandelier_2.glb', (gltf) => {
-            // 1. Set Size: Change 4 to 2 (4 is usually too big for a room)
-            const chandelier = normalizeModel(gltf.scene, 3); 
+        // H. PATUNG 1
+        gltfLoader.load('./patung_1.glb', (gltf) => {
+            // 1. Set Size: 2.5 units high
+            const art = normalizeModel(gltf.scene, 3);
 
             // 2. Set Position:
-            // x=0 (Center)
-            // y=6 (High up near the ceiling!)
-            // z=-5 (In front of instruments)
-            chandelier.position.set(-10.5, -3.5, -12); 
+            // x=0 (Center), y=1.25 (On Floor), z=-5 (In front of instruments)
+            art.position.set(-5.4, -0.35, -9.9); 
+            art.rotation.y = Math.PI / 2;
 
-            chandelier.traverse(c => { 
+            art.traverse(c => { 
                 if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
             });
-            scene.add(chandelier);
+            scene.add(art);
+        }, undefined, (e) => console.error("Art 1 error", e));
+        
+        // H. CHANDELIERS (MULTIPLE)
+        gltfLoader.load('./chandelier_2.glb', (gltf) => {
+            // 1. Prepare the original model once
+            const originalChandelier = normalizeModel(gltf.scene, 3); 
+            
+            // 2. Define positions: 
+            // We set X to 0 to center them in the room. 
+            // We vary the Z to space them out down the hall.
+            const chandelierPositions = [
+                { x: -10.5, y: -2.7, z: 5 },   // Near entrance
+                { x: -10.5, y: -2.7, z: -5 },  // Middle front
+                { x: -10.5, y: -2.7, z: -15 }, // Middle back
+                { x: -10.5, y: -2.7, z: -25 },  // Far back
+                { x: -10.5, y: -2.7, z: -35 }  // Far back
+            ];
+
+            chandelierPositions.forEach(pos => {
+                // Clone the scene for better performance (vs loading again)
+                const chandelier = originalChandelier.clone();
+
+                chandelier.position.set(pos.x, pos.y, pos.z);
+
+                chandelier.traverse(c => { 
+                    if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+                });
+
+                scene.add(chandelier);
+            });
+
         }, undefined, (e) => console.error("Chandelier error", e));
 
         // --- 4. AUDIO SYSTEM ---

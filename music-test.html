@@ -283,6 +283,21 @@
 
         }, undefined, (e) => console.error("Bonang error", e));
 
+        // Insert: PAINTING (static display)
+        // Place `painting_5.glb` in a free wall area as a static exhibit
+        gltfLoader.load('./painting_5.glb', (gltf) => {
+            const painting = gltf.scene;
+            // basic safety: enable shadows if meshes exist
+            painting.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Adjust scale/position to fit wall area — tweak these values if needed
+            painting.scale.setScalar(1.2);
+            // Position chosen to sit on a free wall area; change coordinates to move it
+            painting.position.set(-21.875, 3, 5);
+            painting.rotation.y = Math.PI / 2;
+
+            scene.add(painting);
+        }, undefined, (e) => console.error("Painting (painting_5.glb) error", e));
+
         // D. KOLINTANG
         const kolintangPitches = [];
         for (let i = 0; i < 16; i++) { kolintangPitches.push(200 + (i * 100)); }

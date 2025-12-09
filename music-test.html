@@ -9,7 +9,7 @@
         /* UI UTAMA */
         #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(10,10,10,0.95); display: flex; flex-direction: column;
+            background: rgba(10,10,10,0.95); display: none; flex-direction: column;
             justify-content: center; align-items: center; z-index: 10; color: white;
             text-align: center; cursor: pointer; transition: opacity 0.5s;
         }
@@ -284,7 +284,6 @@
         }, undefined, (e) => console.error("Bonang error", e));
 
         // Insert: PAINTING (static display)
-        // Place `painting_5.glb` in a free wall area as a static exhibit
         gltfLoader.load('./painting_5.glb', (gltf) => {
             const painting = gltf.scene;
             // basic safety: enable shadows if meshes exist
@@ -297,6 +296,36 @@
 
             scene.add(painting);
         }, undefined, (e) => console.error("Painting (painting_5.glb) error", e));
+
+        // Insert: PATUNG KAYU (wooden statue hanging on wall)
+        gltfLoader.load('./patung_kayu.glb', (gltf) => {
+            const patungKayu = normalizeModel(gltf.scene, 2.5);
+            patungKayu.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Position on wall - adjust coordinates as needed
+            patungKayu.position.set(-22.4, 3, -5);
+            patungKayu.rotation.y = Math.PI / 2;
+            scene.add(patungKayu);
+        }, undefined, (e) => console.error("Patung Kayu error", e));
+
+        // Insert: WAYANG 1 (at corner of museum)
+        gltfLoader.load('./wayang_1.glb', (gltf) => {
+            const wayang1 = normalizeModel(gltf.scene, 3.5);
+            wayang1.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Position at corner - front left
+            wayang1.position.set(20, 3.1, 5);
+            wayang1.rotation.y = Math.PI;
+            scene.add(wayang1);
+        }, undefined, (e) => console.error("Wayang 1 error", e));
+
+        // Insert: WAYANG 2 (at another corner of museum)
+        gltfLoader.load('./wayang_2.glb', (gltf) => {
+            const wayang2 = normalizeModel(gltf.scene, 3.5);
+            wayang2.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Position at corner - front right
+            wayang2.position.set(20, 2.8, 10);
+            wayang2.rotation.y = -Math.PI / 2;
+            scene.add(wayang2);
+        }, undefined, (e) => console.error("Wayang 2 error", e));
 
         // D. KOLINTANG
         const kolintangPitches = [];
@@ -585,11 +614,22 @@
         const controls = new PointerLockControls(camera, document.body);
         const overlay = document.getElementById('overlay');
 
-        overlay.addEventListener('click', async () => { await initAudio(); controls.lock(); });
+        // Auto-start on page load
+        document.addEventListener('click', async () => {
+            if (!controls.isLocked) {
+                await initAudio();
+                controls.lock();
+            }
+        }, { once: false });
+
+        // Initialize audio on first interaction
+        window.addEventListener('load', () => {
+            // Show instruction to click to start
+            document.body.style.cursor = 'pointer';
+        });
 
         controls.addEventListener('lock', () => {
-            overlay.style.opacity = '0';
-            setTimeout(() => overlay.style.display = 'none', 500);
+            document.body.style.cursor = 'none';
         });
         
         // SAAT ESC DITEKAN (UNLOCK)
@@ -600,10 +640,8 @@
             controlsHint.style.display = 'none';
             crosshair.classList.remove('crosshair-active');
             
-            // Tampilkan Overlay
-            overlay.style.display = 'flex';
-            setTimeout(() => overlay.style.opacity = '1', 50);
-            document.getElementById('loading-text').innerText = "TERJEDA - KLIK UNTUK LANJUT";
+            // Allow re-locking by clicking
+            document.body.style.cursor = 'pointer';
         });
 
         // MOUSE CLICK

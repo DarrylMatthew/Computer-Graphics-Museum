@@ -153,7 +153,7 @@
         scene.fog = new THREE.Fog(0xcccccc, 10, 50);
 
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 1.7, 25); 
+        camera.position.set(0, 1.7, 33); 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -193,6 +193,26 @@
             building.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
             scene.add(building);
         }, undefined, (e) => console.error(e));
+
+        // PATUNG ENTRANCE (LEFT)
+        gltfLoader.load('./patung_enterance.glb', (gltf) => {
+            const patung = normalizeModel(gltf.scene, 3.5);
+            patung.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Position at entrance left
+            patung.position.set(-4, 0, 26);
+            patung.rotation.y = Math.PI / 4; // Face slightly inward
+            scene.add(patung);
+        }, undefined, (e) => console.error("Patung Entrance Left error", e));
+
+        // PATUNG ENTRANCE (RIGHT)
+        gltfLoader.load('./patung_enterance.glb', (gltf) => {
+            const patung = normalizeModel(gltf.scene, 3.5);
+            patung.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Position at entrance right
+            patung.position.set(4, 0, 26.7);
+            patung.rotation.y = -Math.PI / 4; // Face slightly inward
+            scene.add(patung);
+        }, undefined, (e) => console.error("Patung Entrance Right error", e));
 
         // B. ANGKLUNG
         const angklungNotes = [0, 2, 4, 5, 7, 9, 11, 12]; 
@@ -283,7 +303,47 @@
 
         }, undefined, (e) => console.error("Bonang error", e));
 
-        // Insert: PAINTING (static display)
+        //  BONSAI 
+        gltfLoader.load('./bonsai.glb', (gltf) => {
+            const bonsai = normalizeModel(gltf.scene, 3.1);
+            bonsai.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Bonang is at (-10, 0.25, 1). Placing bonsai in front
+            bonsai.position.set(-10, 0, 8.7); 
+            scene.add(bonsai);
+        }, undefined, (e) => console.error("Bonsai error", e));
+        
+        //  BONSAI PNK
+        gltfLoader.load('./bonsai_pink.glb', (gltf) => {
+            const bonsai = normalizeModel(gltf.scene, 3.1);
+            bonsai.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Bonang is at (-10, 0.25, 1). Placing bonsai in front
+            bonsai.position.set(10, 0, 8.6); 
+            bonsai.rotation.y = Math.PI / 4;
+            scene.add(bonsai);
+        }, undefined, (e) => console.error("Bonsai error", e));
+
+        // JAPANESE PAINTING (behind bonsai_pink)
+        gltfLoader.load('./painting_japanese.glb', (gltf) => {
+            const painting = normalizeModel(gltf.scene, 3.1);
+            painting.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Position on right wall (x=21.8), aligned with bonsai_pink (z=8.6)
+            painting.position.set(11, 0.6, 9.385);
+            painting.rotation.y = Math.PI;
+            scene.add(painting);
+        }, undefined, (e) => console.error("Japanese Painting error", e));
+
+        // PAINTING 7 bonsai
+        gltfLoader.load('./painting_7.glb', (gltf) => {
+            const painting = normalizeModel(gltf.scene, 2.8);
+            painting.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Same as Japanese painting but x = -11
+            painting.position.set(-10, 0.6, 9.85);
+            painting.rotation.y = Math.PI;
+            scene.add(painting);
+        }, undefined, (e) => console.error("Painting 7 error", e));
+
+
+        //  PAINTING 
         gltfLoader.load('./painting_5.glb', (gltf) => {
             const painting = gltf.scene;
             painting.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
@@ -467,6 +527,24 @@
             });
             scene.add(art);
         }, undefined, (e) => console.error("Art 1 error", e));
+
+        //  FLOWER 1 
+        gltfLoader.load('./flower_1.glb', (gltf) => {
+            const flower = normalizeModel(gltf.scene, 2.5);
+            flower.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Position beside art_1 (x=0, z=-18.3)
+            flower.position.set(-12.9, -0.1, -18.1);
+            scene.add(flower);
+        }, undefined, (e) => console.error("Flower 1 error", e));
+        
+        //  FLOWER 2
+        gltfLoader.load('./flower_1.glb', (gltf) => {
+            const flower = normalizeModel(gltf.scene, 2.5);
+            flower.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }});
+            // Position beside art_1 (x=0, z=-18.3)
+            flower.position.set(13.1, -0.1, -18.1);
+            scene.add(flower);
+        }, undefined, (e) => console.error("Flower 1 error", e));
         
         // H. PATUNG 1
         gltfLoader.load('./patung_1.glb', (gltf) => {
